@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1
-FROM node:22.12.0-alpine3.21
+FROM node:22.23.4-alpine3.24@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914
 
 WORKDIR /app
+
+# npm n'est pas utilise a l'execution : on le retire (surface d'attaque + CVE embarquees)
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 ENV PORT=3001
 
