@@ -1,10 +1,13 @@
 services:
   api:
+    image: ${IMAGE_PREFIX:-ghcr.io/alan021022/docker-demo-api-starter_demo-api}/api:${TAG:-latest}
     build:
       context: ./api
+      dockerfile: Dockerfile.multi
     ports:
       - "${API_PORT:-8080}:3000"
     environment:
+      NOTIFIER_URL: http://notifier:3001
       PGHOST: db
       PGPORT: "5432"
       PGUSER: "${POSTGRES_USER}"
@@ -12,9 +15,21 @@ services:
       PGPASSWORD_FILE: /run/secrets/db_password
     secrets:
       - db_password
+    networks: [front, back]
     depends_on:
       db:
         condition: service_healthy
+      notifier:
+        condition: service_started
+    restart: unless-stopped
+
+  notifier:
+    image: ${IMAGE_PREFIX:-ghcr.io/alan021022/docker-demo-api-starter_demo-api}/notifier:${TAG:-latest}
+    build:
+      context: ./notifier
+    environment:
+      PORT: "3001"
+    networks: [back]
     restart: unless-stopped
 
   db:
@@ -28,6 +43,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks: [back]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 5s
@@ -42,10 +58,15 @@ services:
       ADMINER_DEFAULT_SERVER: db
     ports:
       - "${ADMINER_PORT:-8081}:8080"
+    networks: [front, back]
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
+
+networks:
+  front:
+  back:
 
 volumes:
   pgdata:

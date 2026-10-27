@@ -6,6 +6,7 @@
  *
  * Variables d'environnement :
  *   PORT             port d'ecoute                    (def: 3000)
+ *   NOTIFIER_URL     URL du service notifier          (def: http://notifier:3001)
  *   VERSION          renvoyee par "/" et /version     (def: "dev")
  *   PG*              connexion PostgreSQL (voir db.js)
  */
@@ -15,6 +16,22 @@ const db = require('./db');
 
 const PORT = Number(process.env.PORT || 3000);
 const VERSION = process.env.VERSION || 'dev';
+const NOTIFIER_URL = process.env.NOTIFIER_URL || 'http://notifier:3001';
+
+// Best-effort : une panne de notifier ne doit jamais casser l'API.
+async function notify(event, payload) {
+  try {
+    const r = await fetch(`${NOTIFIER_URL}/notify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event, payload }),
+      signal: AbortSignal.timeout(2000),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  } catch (err) {
+    console.log(JSON.stringify({ level: 'warn', msg: 'notifier unavailable', err: err.message }));
+  }
+}
 
 const app = express();
 app.use(express.json());
@@ -63,7 +80,9 @@ app.post('/products', async (req, res) => {
     return res.status(400).json({ error: 'name (string) et price_cents (entier >= 0) requis' });
   }
   try {
-    res.status(201).json(await db.addProduct(name, priceCents));
+    const product = await db.addProduct(name, priceCents);
+    res.status(201).json(product);
+    notify('product.created', product);
   } catch (err) {
     res.status(503).json({ error: 'db_unavailable', detail: err.message });
   }
